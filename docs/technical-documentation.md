@@ -92,4 +92,4 @@ $$\text{Margin}_{ij} = D_{\text{sep},ij} - D_{\text{required},ij}$$
 Deterministic profiling across $10,000$ iterations demonstrates:
 * $N=2, M=2$ (6 pairs): Mean evaluation time **$69\text{ }\mu\text{s}$ to $113\text{ }\mu\text{s}$** ($< 0.12\text{ ms}$).
 * Worst-case tail latency: $< 2.8\text{ ms}$.
-* Fully complies with the $10\text{ Hz}$ ($100\text{ ms}$) plant control cycle, leaving $>97\%$ CPU headroom for rendering.
+* The measured pairwise evaluation latency is well below the 100 ms target budget for a 10 Hz simulation step.

@@ -4,7 +4,7 @@
 
 > [!IMPORTANT]
 > **No External Backend or Database**:
-> * The current version of this application is a client-side React 19 / TypeScript research prototype.
+> * The current application is a client-side React/TypeScript prototype. It does not use a remote REST API or external SQL database.
 > * **No external HTTP REST/GraphQL API** or remote backend server is required.
 > * **No external SQL/NoSQL database** is used.
 > * All simulation states, layout definitions, telemetry records, and stakeholder evaluation responses are persisted locally using the standard **Web Storage API (`localStorage`)**.

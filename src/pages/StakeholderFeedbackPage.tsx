@@ -440,7 +440,7 @@ export const StakeholderFeedbackPage: React.FC<StakeholderFeedbackPageProps> = (
           </div>
         </div>
 
-        {/* Section 2: 10-Point Likert Evaluation */}
+        {/* Section 2: 10-Question 5-Point Likert Evaluation */}
         <div className="space-y-4 pt-2 border-t border-slate-700/60">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
             <div>

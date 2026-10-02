@@ -29,7 +29,7 @@ The Stakeholder Evaluation module provides a structured evaluation framework for
 
 ---
 
-## 3. Standardized 10-Point Questionnaire Instrument
+## 3. Standardized 10-Question Questionnaire Instrument (5-Point Likert Scale)
 
 Evaluators rate statements using a 5-point Likert scale:
 *(1 = Strongly Disagree, 2 = Disagree, 3 = Neutral, 4 = Agree, 5 = Strongly Agree)*

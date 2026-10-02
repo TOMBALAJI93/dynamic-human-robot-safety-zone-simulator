@@ -61,17 +61,17 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ language, onLanguage
       statusColor: stakeholderSummary.status === 'RESPONSES_AVAILABLE'
         ? 'text-emerald-400 bg-emerald-950/80 border-emerald-800'
         : 'text-amber-400 bg-amber-950/80 border-amber-800',
-      description: '10-point Likert usability and explainability instrument for EHS Safety Officers, Plant Technicians, and Automation Engineers. Zero fabricated responses; ready for authentic industry field trials.',
+      description: '10-question questionnaire using a 5-point Likert scale for EHS Safety Officers, Plant Technicians, and Automation Engineers. Zero fabricated responses; ready for authentic industry field trials.',
       icon: <Users className="w-4 h-4 text-purple-400" />
     }
   ];
 
   const verificationMetrics = [
     { label: 'Review 1 Baseline Score', value: '34.3 / 35 (98%)', status: 'Preserved' },
-    { label: 'Automated Test Suite', value: '18 / 18 Tests Passed (100%)', status: 'Passing' },
+    { label: 'Automated Test Suite', value: '32 / 32 Tests Passed (100%)', status: 'Passing' },
     { label: 'Multi-Agent Scenarios', value: '3 Swarm + 3 Single Scenarios', status: 'Active' },
     { label: 'Edge & Failure Boundaries', value: '18 Edge Cases (12 Single + 6 Swarm)', status: 'Verified' },
-    { label: 'Production Build (Vite/TS)', value: '0 Errors / Clean Bundle', status: 'Passing' },
+    { label: 'Production Build (Vite/TS)', value: '0 TypeScript Errors', status: 'Passing' },
     { label: 'Stakeholder Field Responses', value: `${stakeholderSummary.totalResponses} Real Responses Stored`, status: stakeholderSummary.status === 'RESPONSES_AVAILABLE' ? 'Active' : 'Pending' },
   ];
 

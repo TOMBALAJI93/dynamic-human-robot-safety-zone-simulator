@@ -14,7 +14,9 @@ $$\text{INPUT CONDITION} \longrightarrow \text{SAFETY ENGINE / MODULE} \longrigh
 
 ---
 
-## 2. Test Suite Matrix (32 Tests Total)
+## 2. 32-Test Automated Verification Matrix
+
+Covering safety, physics, multi-agent, stakeholder, and error-handling behaviour.
 
 ### Category A: Environmental Safety Engine Tests (ENV-01 to ENV-08)
 | Test ID | Module | Input / Test Condition | Expected Behavior | Actual Behavior | Result |
@@ -42,7 +44,7 @@ $$\text{INPUT CONDITION} \longrightarrow \text{SAFETY ENGINE / MODULE} \longrigh
 | **MULTI-09** | `scenarioData.ts` | 18 Edge Cases suite (12 Single-Agent + 6 Multi-Agent) | 100% of scenarios match expected safety outcome | $18 / 18$ edge cases passed | **PASS** |
 | **MULTI-10** | `safetyEngine.ts` | 1,000 Monte Carlo randomized multi-agent swarms | Robustness check: zero `NaN`, zero crashes, 100% valid | $100\%$ valid across $2,400+$ pairs | **PASS** |
 
-### Category C: Stakeholder Evaluation Module Tests (STAKE-01 to STAKE-08)
+### Category C: REVIEW 3 FINAL VERIFICATION — STAKEHOLDER MODULE TESTS (STAKE-01 to STAKE-08)
 | Test ID | Module | Input / Test Condition | Expected Behavior | Actual Behavior | Result |
 | :--- | :--- | :--- | :--- | :--- | :---: |
 | **STAKE-01** | `storageService.ts` | Empty evaluation array (`[]`) | Returns `PENDING_ACTUAL_TRIALS` with 0 responses and no fake averages | Status: `PENDING_ACTUAL_TRIALS`, 0 avg | **PASS** |
@@ -54,14 +56,14 @@ $$\text{INPUT CONDITION} \longrightarrow \text{SAFETY ENGINE / MODULE} \longrigh
 | **STAKE-07** | `translations.ts` | English localization dictionary (`en.stakeholder`) | All 10 questions and 4 role titles non-empty | Complete English dictionary | **PASS** |
 | **STAKE-08** | `translations.ts` | Tamil localization dictionary (`ta.stakeholder`) | All 10 questions and 4 role titles non-empty | Complete Tamil dictionary | **PASS** |
 
-### Category D: Motion Engine Kinematics Tests (PHYS-01 to PHYS-03)
+### Category D: REVIEW 3 FINAL VERIFICATION — MOTION & PHYSICS TESTS (PHYS-01 to PHYS-03)
 | Test ID | Module | Input / Test Condition | Expected Behavior | Actual Behavior | Result |
 | :--- | :--- | :--- | :--- | :--- | :---: |
 | **PHYS-01** | `motionEngine.ts` | Entity at $(10, 10)$ with speed $2.0\text{ m/s}$, waypoint $(20, 10)$, $dt=1.0\text{ s}$ | Advances by $2.0\text{ m}$ to $(12.00, 10.00)$ | Position: $(12.00, 10.00)$ | **PASS** |
 | **PHYS-02** | `motionEngine.ts` | Empty path (`[]`) and index overflow ($index=99$) | Retains current position safely with `reachedEnd: true` | Handled safely without crash | **PASS** |
 | **PHYS-03** | `motionEngine.ts` | Synchronous multi-agent swarm step ($dt=0.5\text{ s}$) | Advances active agents while keeping IDLE robots stationary | Active agents advance; IDLE held | **PASS** |
 
-### Category E: Error Handling & Robustness Tests (ERR-01 to ERR-03)
+### Category E: REVIEW 3 FINAL VERIFICATION — ERROR HANDLING & ROBUSTNESS TESTS (ERR-01 to ERR-03)
 | Test ID | Module | Input / Test Condition | Expected Behavior | Actual Behavior | Result |
 | :--- | :--- | :--- | :--- | :--- | :---: |
 | **ERR-01** | `storageService.ts` | Corrupted evaluation entry containing `NaN` scores | Sanitizes corrupt values without throwing exception or `NaN` avg | Valid numerical average computed | **PASS** |

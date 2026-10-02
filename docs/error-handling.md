@@ -34,7 +34,7 @@ The simulator implements multi-tier defensive programming to protect against run
 │  │ LocalStorage Fault Recovery     │ RFC 4180 CSV Sanitizer          │  │
 │  │ - try/catch JSON parse fallback │ - Quotes escaped (""text"")     │  │
 │  │ - Schema migration backwards com│ - Commas / newlines encapsulated│  │
-│  │ - Zero data corruption tolerance│ - Formula injection suppression │  │
+│  │ - Zero data corruption tolerance│ - RFC 4180 quote/comma escaping│  │
 │  └─────────────────────────────────┴─────────────────────────────────┘  │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
@@ -50,7 +50,7 @@ The simulator implements multi-tier defensive programming to protect against run
 | **Coincident Entities ($D_{\text{sep}} = 0.0\text{ m}$)** | `calculateApproachFactor()` checks $D < 0.05\text{ m}$ | Replaces $0/0$ directional vector with head-on $1.5\times$ multiplier | Instant `EMERGENCY` state; pulsing warning line | `MULTI-05`, `MULTI-EC-01` |
 | **Out-of-Bounds Coordinates ($x < 0, y > 100$)** | Range checks in `calculateDistance()` | Evaluates Euclidean separation in extended $(x,y)$ plane | Entity displayed on border; safety calculated correctly | `MULTI-07`, `MULTI-EC-06` |
 | **Corrupted / Tampered LocalStorage** | `try/catch` blocks in `storageService.ts` with `Array.isArray` checks | Falls back to empty dataset (`[]`) without throwing | Status returns `PENDING ACTUAL TRIALS` | `ERR-01` |
-| **CSV Injection / Unescaped Quotes** | `exportStakeholderToCSV()` sanitization | Quotes escaped (`""`), strings encapsulated in quotes | Clean CSV export compatible with pandas/Excel | `ERR-02`, `STAKE-05` |
+| **CSV Formatting & Escaped Quotes** | `exportStakeholderToCSV()` sanitization | CSV fields containing commas, quotes, and line breaks are escaped according to RFC 4180. Exported values are validated before serialization. | Clean CSV export compatible with pandas/Excel | `ERR-02`, `STAKE-05` |
 | **Missing / Null Point2D Coordinates** | `calculateDistance()` sanity checks | Returns safe default clearance ($10.0\text{ m}$) | System continues running; no NaN propagation | `ERR-03` |
 | **React Component Rendering Exception** | `ErrorBoundary` lifecycle (`componentDidCatch`) | Intercepts error; renders structured recovery card | Clean error message with "Reload Application" button | Verified in production build |
 

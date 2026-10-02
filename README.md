@@ -133,13 +133,13 @@ Empirically measured from automated runner scripts (`scripts/runEnvironmentalExp
 | :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
 | **MULTI-EXP-01** | Intersection Crossing | 6 | 1.00 | **0.05 m** | **7.05 m** | AMR-01 ↔ AMR-02 | **EMERGENCY** | **38 $\mu$s** | **930 $\mu$s** |
 | **MULTI-EXP-02** | Worker-Heavy Aisle | 3 | 1.00 | **2.00 m** | **8.65 m** | AMR-01 ↔ Worker-01 | **UNSAFE** | **16 $\mu$s** | **99 $\mu$s** |
-| **MULTI-EXP-03** | Plant Convergence | 6 | 0.65 | **0.02 m** | **10.03 m** | AMR-01 ↔ Worker-01 | **EMERGENCY** | **28 $\mu$s** | **386 $\mu$s** | Plant Convergence | 6 | 0.65 | **0.02 m** | **10.03 m** | AMR-01 ↔ Worker-01 | **EMERGENCY** | **69 $\mu$s** | **603 $\mu$s** |
+| **MULTI-EXP-03** | Plant Convergence | 6 | 0.65 | **0.02 m** | **10.03 m** | AMR-01 ↔ Worker-01 | **EMERGENCY** | **28 $\mu$s** | **386 $\mu$s** |
 
 ---
 
 ## 8. Data Schema & Persistence Clarification
 
-The application is fully client-side and requires **no external database or HTTP backend**.
+The current application is a client-side React/TypeScript prototype. It does not use a remote REST API or external SQL database.
 
 * **LocalStorage Key**: `safety_simulator_stakeholder_evals_v2`
 * **Data Schema Details**: See [`docs/data-schema.md`](./docs/data-schema.md) for full TypeScript interfaces, CSV column schemas (RFC 4180), and JSON structures.
@@ -179,7 +179,7 @@ npm run dev
 
 ## 10. Technical Documentation Index
 
-1. [`docs/testing.md`](./docs/testing.md) — Complete 32-test unit and system verification matrix.
+1. [`docs/testing.md`](./docs/testing.md) — 32-test automated verification matrix covering safety, physics, multi-agent, stakeholder, and error-handling behaviour.
 2. [`docs/error-handling.md`](./docs/error-handling.md) — React error boundary, input sanitization, and fault recovery.
 3. [`docs/data-schema.md`](./docs/data-schema.md) — LocalStorage, CSV, JSON schemas, and internal service interfaces.
 4. [`docs/review-3-report.md`](./docs/review-3-report.md) — Final College Review 3 evaluation report.

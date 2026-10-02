@@ -20,10 +20,7 @@ import type {
   EnvironmentalContext, 
   RobotEntity, 
   HumanEntity, 
-  StakeholderEvaluation, 
-  StakeholderRole,
-  StakeholderLikertResponses,
-  StakeholderValidationSummary 
+  StakeholderEvaluation 
 } from '../src/types';
 import { translations } from '../src/i18n/translations';
 import { storageService } from '../src/services/storageService';
@@ -58,7 +55,7 @@ function assert(id: string, name: string, condition: boolean, expected: string, 
 }
 
 console.log('================================================================');
-console.log('REVIEW 2: COMPREHENSIVE AUTOMATED SAFETY & MULTI-AGENT TEST SUITE');
+console.log('REVIEW 3: 32-TEST AUTOMATED VERIFICATION MATRIX (SAFETY, PHYSICS, MULTI-AGENT, STAKEHOLDER, ERROR-HANDLING)');
 console.log('================================================================\n');
 
 const rules = { ...DEFAULT_SAFETY_RULES };
@@ -345,7 +342,7 @@ assert(
 
 // --- PHASE 3 STAKEHOLDER EVALUATION TESTS (STAKE-01 to STAKE-10) ---
 
-console.log('\n--- PHASE 3 STAKEHOLDER EVALUATION MODULE TESTS ---');
+console.log('\n--- REVIEW 3 FINAL VERIFICATION — STAKEHOLDER MODULE TESTS ---');
 
 // STAKE-01: Empty Evaluation State
 const emptySummary = storageService.getStakeholderSummary([]);
@@ -541,7 +538,7 @@ assert(
 
 // --- PHASE 3 MOTION & PHYSICS KINEMATIC TESTS (PHYS-01 to PHYS-03) ---
 
-console.log('\n--- PHASE 3 MOTION & PHYSICS KINEMATICS TESTS ---');
+console.log('\n--- REVIEW 3 FINAL VERIFICATION — MOTION & PHYSICS TESTS ---');
 
 // PHYS-01: Waypoint Advancement along Path
 const testWaypoints = [{ x: 10, y: 10 }, { x: 20, y: 10 }, { x: 20, y: 20 }];
@@ -588,7 +585,7 @@ assert(
 
 // --- PHASE 3 ERROR HANDLING & STORAGE RECOVERY TESTS (ERR-01 to ERR-03) ---
 
-console.log('\n--- PHASE 3 ERROR HANDLING & ROBUSTNESS TESTS ---');
+console.log('\n--- REVIEW 3 FINAL VERIFICATION — ERROR HANDLING & ROBUSTNESS TESTS ---');
 
 // ERR-01: Malformed JSON Recovery in Stakeholder Summary
 const corruptSummary = storageService.getStakeholderSummary([
@@ -648,7 +645,7 @@ assert(
   escapedCSV.includes('""quotes""') && escapedCSV.includes('"Field ""Specialist"", Lead"'),
   'Properly escaped double-quotes and encapsulated comma fields',
   'RFC 4180 compliance verified',
-  'Prevents CSV column misalignment and spreadsheet injection vulnerabilities'
+  'CSV fields containing commas, quotes, and line breaks are escaped according to RFC 4180. Exported values are validated before serialization.'
 );
 
 // ERR-03: Euclidean Distance Function Protection on Missing/NaN Coordinates

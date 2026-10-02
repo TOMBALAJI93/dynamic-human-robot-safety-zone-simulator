@@ -13,7 +13,7 @@ import * as path from 'path';
 import { PREDEFINED_SCENARIOS } from '../src/engine/scenarios/scenarioData';
 import { evaluateMultiAgentSafetyState, DEFAULT_SAFETY_RULES, DEFAULT_ENVIRONMENT_CONFIG } from '../src/engine/safety/safetyEngine';
 import { updateMultiAgentMotion } from '../src/engine/physics/motionEngine';
-import type { EnvironmentalContext, RiskLevel } from '../src/types';
+import type { RiskLevel } from '../src/types';
 
 const multiScenarios = PREDEFINED_SCENARIOS.filter(s => s.id.startsWith('sc-multi-'));
 
