@@ -6,15 +6,20 @@ import {
   Trash2, 
   TrendingUp, 
   History, 
-  ShieldCheck, 
-  Eye,
-  X
+  Eye, 
+  X, 
+  Thermometer,
 } from 'lucide-react';
 import type { Language } from '../i18n/translations';
 import { translations } from '../i18n/translations';
 import { PREDEFINED_SCENARIOS } from '../engine/scenarios/scenarioData';
-import { evaluateSafetyState, DEFAULT_SAFETY_RULES } from '../engine/safety/safetyEngine';
-import { updateRobotMotion, updateHumanMotion } from '../engine/physics/motionEngine';
+import { 
+  evaluateSafetyState, 
+  evaluateMultiAgentSafetyState, 
+  DEFAULT_SAFETY_RULES, 
+  DEFAULT_ENVIRONMENT_CONFIG 
+} from '../engine/safety/safetyEngine';
+import { updateRobotMotion, updateHumanMotion, updateMultiAgentMotion } from '../engine/physics/motionEngine';
 import type { ExperimentSummary, ExperimentRecord, RiskLevel } from '../types';
 import { storageService } from '../services/storageService';
 
@@ -39,8 +44,8 @@ export const ExperimentsPage: React.FC<ExperimentsPageProps> = ({ language }) =>
     const newResults: ExperimentSummary[] = [];
 
     PREDEFINED_SCENARIOS.forEach((scenario) => {
-      let robot = { ...scenario.initialRobot };
-      let human = { ...scenario.initialHuman };
+      const isMulti = (scenario.robots && scenario.robots.length > 1) || (scenario.humans && scenario.humans.length > 1);
+      const env = scenario.environment || DEFAULT_ENVIRONMENT_CONFIG;
       const rules = scenario.safetyRules || DEFAULT_SAFETY_RULES;
 
       let minDistance = 999;
@@ -55,36 +60,65 @@ export const ExperimentsPage: React.FC<ExperimentsPageProps> = ({ language }) =>
       const dt = 0.2;
       const totalSteps = Math.floor(scenario.duration / dt);
 
-      for (let step = 0; step < totalSteps; step++) {
-        const time = Math.round(step * dt * 10) / 10;
-        robot = updateRobotMotion(robot, dt);
-        human = updateHumanMotion(human, dt);
+      if (isMulti) {
+        let currentRobots = (scenario.robots || [scenario.initialRobot]).map(r => ({ ...r }));
+        let currentHumans = (scenario.humans || [scenario.initialHuman]).map(h => ({ ...h }));
 
-        const evalResult = evaluateSafetyState(rules, robot, human);
-        if (evalResult.currentDistance < minDistance) {
-          minDistance = evalResult.currentDistance;
-        }
-        if (evalResult.requiredDynamicDistance > maxRequiredDistance) {
-          maxRequiredDistance = evalResult.requiredDynamicDistance;
-        }
+        for (let step = 0; step < totalSteps; step++) {
+          const time = Math.round(step * dt * 10) / 10;
+          const { robots: nextR, humans: nextH } = updateMultiAgentMotion(currentRobots, currentHumans, dt);
+          currentRobots = nextR;
+          currentHumans = nextH;
 
-        if (evalResult.riskLevel === 'WARNING' && firstWarningTime === null) {
-          firstWarningTime = time;
-        }
-        if ((evalResult.riskLevel === 'UNSAFE' || evalResult.riskLevel === 'EMERGENCY')) {
-          if (firstUnsafeTime === null) firstUnsafeTime = time;
-          violationCount++;
-        }
+          const multiEval = evaluateMultiAgentSafetyState(rules, currentRobots, currentHumans, env);
+          const threat = multiEval.highestThreatPair;
+          const curDist = threat ? threat.currentDistance : 10.0;
+          const reqDist = threat ? threat.requiredDynamicDistance : 2.5;
 
-        if (evalResult.riskLevel === 'EMERGENCY') maxRiskLevel = 'EMERGENCY';
-        else if (evalResult.riskLevel === 'UNSAFE' && maxRiskLevel !== 'EMERGENCY') maxRiskLevel = 'UNSAFE';
-        else if (evalResult.riskLevel === 'WARNING' && maxRiskLevel === 'SAFE') maxRiskLevel = 'WARNING';
+          if (curDist < minDistance) minDistance = curDist;
+          if (reqDist > maxRequiredDistance) maxRequiredDistance = reqDist;
 
-        if (evalResult.baselineRiskLevel === 'UNSAFE' || evalResult.baselineRiskLevel === 'EMERGENCY') {
-          baselineViolations++;
+          if (curDist < 3.0) baselineViolations++;
+          if (multiEval.overallRiskLevel === 'WARNING' && firstWarningTime === null) firstWarningTime = time;
+          if ((multiEval.overallRiskLevel === 'UNSAFE' || multiEval.overallRiskLevel === 'EMERGENCY') && firstUnsafeTime === null) {
+            firstUnsafeTime = time;
+          }
+          if (multiEval.overallRiskLevel === 'UNSAFE' || multiEval.overallRiskLevel === 'EMERGENCY') violationCount++;
+          if (curDist >= reqDist && curDist < 3.0) dynamicStopsAvoided++;
+
+          const riskWeights: Record<RiskLevel, number> = { SAFE: 0, WARNING: 1, UNSAFE: 2, EMERGENCY: 3 };
+          if (riskWeights[multiEval.overallRiskLevel] > riskWeights[maxRiskLevel]) {
+            maxRiskLevel = multiEval.overallRiskLevel;
+          }
         }
-        if (evalResult.baselineRiskLevel === 'UNSAFE' && evalResult.riskLevel === 'SAFE') {
-          dynamicStopsAvoided++;
+      } else {
+        let robot = { ...scenario.initialRobot };
+        let human = { ...scenario.initialHuman };
+
+        for (let step = 0; step < totalSteps; step++) {
+          const time = Math.round(step * dt * 10) / 10;
+          robot = updateRobotMotion(robot, dt);
+          human = updateHumanMotion(human, dt);
+
+          const evalResult = evaluateSafetyState(rules, robot, human, env);
+
+          if (evalResult.currentDistance < minDistance) minDistance = evalResult.currentDistance;
+          if (evalResult.requiredDynamicDistance > maxRequiredDistance) maxRequiredDistance = evalResult.requiredDynamicDistance;
+
+          if (evalResult.currentDistance < 3.0) baselineViolations++;
+          if (evalResult.riskLevel === 'WARNING' && firstWarningTime === null) firstWarningTime = time;
+          if ((evalResult.riskLevel === 'UNSAFE' || evalResult.riskLevel === 'EMERGENCY') && firstUnsafeTime === null) {
+            firstUnsafeTime = time;
+          }
+          if (evalResult.riskLevel === 'UNSAFE' || evalResult.riskLevel === 'EMERGENCY') violationCount++;
+          if (evalResult.currentDistance >= evalResult.requiredDynamicDistance && evalResult.currentDistance < 3.0) {
+            dynamicStopsAvoided++;
+          }
+
+          const riskWeights: Record<RiskLevel, number> = { SAFE: 0, WARNING: 1, UNSAFE: 2, EMERGENCY: 3 };
+          if (riskWeights[evalResult.riskLevel] > riskWeights[maxRiskLevel]) {
+            maxRiskLevel = evalResult.riskLevel;
+          }
         }
       }
 
@@ -93,16 +127,18 @@ export const ExperimentsPage: React.FC<ExperimentsPageProps> = ({ language }) =>
         scenarioName: scenario.name,
         initialRobotSpeed: scenario.initialRobot.currentSpeed,
         initialHumanSpeed: scenario.initialHuman.currentSpeed,
-        minDistance: Math.round(minDistance * 100) / 100,
-        maxRequiredDistance: Math.round(maxRequiredDistance * 100) / 100,
+        minDistance: Number(minDistance.toFixed(2)),
+        maxRequiredDistance: Number(maxRequiredDistance.toFixed(2)),
         firstWarningTime,
         firstUnsafeTime,
         violationCount,
         maxRiskLevel,
         finalDecision: maxRiskLevel,
-        dynamicUnnecessaryStopsAvoided: Math.round(dynamicStopsAvoided * dt * 10) / 10,
         baselineViolations,
-        timestamp: new Date().toLocaleTimeString(),
+        dynamicUnnecessaryStopsAvoided: dynamicStopsAvoided,
+        timestamp: new Date().toISOString(),
+        environmentalCondition: env ? `Floor ${env.floorCondition} (μ=${env.frictionCoefficient}), ${env.temperature}°C` : 'Nominal',
+        isMultiAgent: isMulti
       });
     });
 
@@ -111,222 +147,254 @@ export const ExperimentsPage: React.FC<ExperimentsPageProps> = ({ language }) =>
     setIsRunning(false);
   };
 
-  const handleExportCSV = () => {
-    if (history.length === 0) {
-      alert('No experiment history records to export. Run simulations or benchmarks first.');
-      return;
-    }
-    const csv = storageService.exportExperimentsToCSV(history);
-    storageService.downloadCSV(csv, `plant_safety_experiments_${Date.now()}.csv`);
-  };
-
-  const handleDeleteHistoryItem = (id: string) => {
-    storageService.deleteExperimentRecord(id);
-    setHistory(storageService.getExperimentHistory());
-    if (selectedRecord?.id === id) setSelectedRecord(null);
-  };
-
-  const handleClearHistory = () => {
-    if (window.confirm('Clear all saved experiment history?')) {
+  const clearHistory = () => {
+    if (window.confirm('Are you sure you want to clear all experiment run history?')) {
       storageService.clearExperimentHistory();
       setHistory([]);
       setSelectedRecord(null);
     }
   };
 
-  const getBadge = (level: RiskLevel) => {
-    switch (level) {
-      case 'SAFE':
-        return <span className="text-emerald-400 font-bold">SAFE</span>;
-      case 'WARNING':
-        return <span className="text-amber-400 font-bold">WARNING</span>;
-      case 'UNSAFE':
-        return <span className="text-rose-400 font-bold">UNSAFE</span>;
-      case 'EMERGENCY':
-        return <span className="text-red-400 font-bold">EMERGENCY</span>;
-    }
+  const exportHistoryCSV = () => {
+    if (history.length === 0) return;
+    const csvContent = storageService.exportExperimentsToCSV(history);
+    storageService.downloadCSV(csvContent, `safety-experiments-history-${Date.now()}.csv`);
+  };
+
+  const exportHistoryJSON = () => {
+    if (history.length === 0) return;
+    storageService.downloadJSON(history, `safety-experiments-history-${Date.now()}.json`);
   };
 
   return (
     <div className="space-y-6">
-      {/* Page Header */}
+      {/* Header */}
       <div className="bg-slate-800/80 border border-slate-700/80 rounded-xl p-6 flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 className="text-xl font-bold text-white flex items-center gap-2">
-            <FlaskConical className="w-5 h-5 text-emerald-400" />
-            {t.experiments.title}
-          </h1>
+          <div className="flex items-center gap-2">
+            <FlaskConical className="w-5 h-5 text-cyan-400" />
+            <h1 className="text-xl font-bold text-white">
+              {t.nav.experiments} & Empirical Benchmark Hub
+            </h1>
+            <span className="text-xs px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 font-mono">
+              Review 2 Multi-Agent Suite
+            </span>
+          </div>
           <p className="text-xs text-slate-400 mt-1 max-w-3xl">
-            {t.experiments.subtitle}
+            Evaluate predefined Single-Agent and Multi-Agent scenarios against ISO/TS 15066 safety rules, multi-entity pairwise arbitration, and plant environmental factors.
           </p>
         </div>
 
-        {/* Tab & Action Buttons */}
-        <div className="flex items-center flex-wrap gap-2">
-          <div className="flex bg-slate-900 border border-slate-700 rounded-lg p-0.5 text-xs">
-            <button
-              onClick={() => setActiveTab('benchmarks')}
-              className={`px-3 py-1.5 rounded font-medium transition ${
-                activeTab === 'benchmarks' ? 'bg-blue-600 text-white font-bold' : 'text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              Batch Benchmarks
-            </button>
-            <button
-              onClick={() => setActiveTab('history')}
-              className={`px-3 py-1.5 rounded font-medium transition ${
-                activeTab === 'history' ? 'bg-blue-600 text-white font-bold' : 'text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              Saved History ({history.length})
-            </button>
-          </div>
-
+        <div className="flex items-center gap-3">
           <button
             onClick={runAllExperiments}
             disabled={isRunning}
-            className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-semibold text-xs rounded-lg shadow transition"
+            className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-semibold text-xs rounded-lg shadow transition"
           >
             <Play className="w-4 h-4" />
-            <span>{isRunning ? 'Running Batch...' : t.experiments.runBatch}</span>
-          </button>
-
-          <button
-            onClick={handleExportCSV}
-            className="flex items-center gap-1.5 px-3 py-2 bg-slate-700 hover:bg-slate-600 text-slate-200 text-xs font-semibold rounded-lg border border-slate-600 transition"
-          >
-            <Download className="w-4 h-4" />
-            <span>{t.experiments.exportCSV}</span>
+            <span>{isRunning ? 'Running Benchmarks...' : 'Run All Benchmark Scenarios'}</span>
           </button>
         </div>
       </div>
 
+      {/* Tabs */}
+      <div className="flex border-b border-slate-800 gap-4 text-xs font-semibold">
+        <button
+          onClick={() => setActiveTab('benchmarks')}
+          className={`pb-3 flex items-center gap-2 border-b-2 transition ${
+            activeTab === 'benchmarks'
+              ? 'border-cyan-400 text-cyan-400'
+              : 'border-transparent text-slate-400 hover:text-slate-200'
+          }`}
+        >
+          <TrendingUp className="w-4 h-4" />
+          <span>Predefined Scenario Benchmarks ({results.length})</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('history')}
+          className={`pb-3 flex items-center gap-2 border-b-2 transition ${
+            activeTab === 'history'
+              ? 'border-cyan-400 text-cyan-400'
+              : 'border-transparent text-slate-400 hover:text-slate-200'
+          }`}
+        >
+          <History className="w-4 h-4" />
+          <span>Simulation Run History ({history.length})</span>
+        </button>
+      </div>
+
+      {/* Tab 1: Predefined Scenario Benchmarks */}
       {activeTab === 'benchmarks' && (
-        <>
-          {/* Results Table */}
-          <div className="bg-slate-800/70 border border-slate-700/70 rounded-xl p-5 space-y-4">
-            <h2 className="text-sm font-semibold text-slate-200 flex items-center justify-between">
-              <span>{t.experiments.batchResults} ({results.length} Scenarios Executed)</span>
-              <span className="text-xs font-normal text-slate-400">Deterministic Simulation Engine</span>
-            </h2>
+        <div className="space-y-6">
+          {results.length === 0 ? (
+            <div className="bg-slate-800/40 border border-slate-700/40 rounded-xl p-10 text-center text-slate-400">
+              <FlaskConical className="w-10 h-10 mx-auto text-slate-600 mb-3" />
+              <p className="text-sm font-semibold text-slate-300">No Benchmark Runs Executed Yet</p>
+              <p className="text-xs text-slate-500 mt-1 mb-4">Click "Run All Benchmark Scenarios" to run automated deterministic simulations.</p>
+              <button
+                onClick={runAllExperiments}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold rounded-lg"
+              >
+                Execute Suite
+              </button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {results.map((res) => {
+                const scenario = PREDEFINED_SCENARIOS.find(s => s.id === res.scenarioId);
+                const env = scenario?.environment;
+                const isMulti = res.isMultiAgent;
 
-            {results.length === 0 ? (
-              <div className="text-center py-8 text-slate-500 text-xs">
-                No benchmark run yet. Click "{t.experiments.runBatch}" to execute batch simulations.
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs">
-                  <thead>
-                    <tr className="border-b border-slate-700 text-slate-400 uppercase tracking-wider font-mono">
-                      <th className="py-2.5 px-3">Scenario</th>
-                      <th className="py-2.5 px-3">Robot Spd</th>
-                      <th className="py-2.5 px-3">Min Dist</th>
-                      <th className="py-2.5 px-3">Max Req Dist</th>
-                      <th className="py-2.5 px-3">1st Warning</th>
-                      <th className="py-2.5 px-3">1st Unsafe</th>
-                      <th className="py-2.5 px-3">Decision</th>
-                      <th className="py-2.5 px-3 text-cyan-400">Stops Avoided</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-800 font-mono">
-                    {results.map((res, idx) => (
-                      <tr key={idx} className="hover:bg-slate-800/40">
-                        <td className="py-3 px-3 font-sans font-medium text-slate-200">{res.scenarioName}</td>
-                        <td className="py-3 px-3 text-slate-300">{res.initialRobotSpeed} m/s</td>
-                        <td className="py-3 px-3 font-bold text-amber-300">{res.minDistance} m</td>
-                        <td className="py-3 px-3 text-slate-300">{res.maxRequiredDistance} m</td>
-                        <td className="py-3 px-3 text-slate-400">{res.firstWarningTime !== null ? `${res.firstWarningTime}s` : 'None'}</td>
-                        <td className="py-3 px-3 text-slate-400">{res.firstUnsafeTime !== null ? `${res.firstUnsafeTime}s` : 'None'}</td>
-                        <td className="py-3 px-3">{getBadge(res.finalDecision)}</td>
-                        <td className="py-3 px-3 text-cyan-400 font-bold">+{res.dynamicUnnecessaryStopsAvoided}s saved</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
+                return (
+                  <div
+                    key={res.scenarioId}
+                    className="bg-slate-800/70 border border-slate-700/70 rounded-xl p-5 space-y-3"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-xs font-bold text-cyan-400 font-mono">{res.scenarioId}</span>
+                        {isMulti && (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-950 text-purple-300 font-mono border border-purple-800">
+                            Multi-Agent
+                          </span>
+                        )}
+                      </div>
+                      <span className={`text-xs px-2 py-0.5 rounded font-bold ${
+                        res.maxRiskLevel === 'EMERGENCY' ? 'bg-rose-950 text-rose-300 border border-rose-800' :
+                        res.maxRiskLevel === 'UNSAFE' ? 'bg-amber-950 text-amber-300 border border-amber-800' :
+                        res.maxRiskLevel === 'WARNING' ? 'bg-yellow-950 text-yellow-300 border border-yellow-800' :
+                        'bg-emerald-950 text-emerald-300 border border-emerald-800'
+                      }`}>
+                        {res.maxRiskLevel}
+                      </span>
+                    </div>
 
-          {/* Explicit Definition of Unnecessary Restriction Metric */}
-          <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-2">
-            <h3 className="text-xs font-bold text-cyan-400 uppercase tracking-wider flex items-center gap-1.5">
-              <TrendingUp className="w-4 h-4" />
-              {t.experiments.baselineComparison}
-            </h3>
-            <p className="text-xs text-slate-300 leading-relaxed font-sans">
-              <strong>{t.experiments.unnecessaryRestrictionsDesc}</strong>
-            </p>
-            <p className="text-[11px] text-slate-400 leading-relaxed font-sans">
-              In Scenario 1 (Normal Operation), the fixed static 4.5m circular envelope would enforce emergency deceleration even though human inspection workers are on a safe parallel aisle. The dynamic model reduced these false restrictions while maintaining strict zero-tolerance separation integrity in converging scenarios.
-            </p>
-          </div>
-        </>
+                    <h3 className="text-sm font-bold text-white">{res.scenarioName}</h3>
+
+                    {env && (
+                      <div className="flex items-center gap-2 text-[11px] text-amber-300 bg-amber-950/40 p-1.5 rounded border border-amber-900/60 font-mono">
+                        <Thermometer className="w-3.5 h-3.5" />
+                        <span>μ={env.frictionCoefficient} • {env.temperature}°C • η={(env.sensorDegradationFactor*100).toFixed(0)}%</span>
+                      </div>
+                    )}
+
+                    <div className="bg-slate-900/80 rounded-lg p-3 space-y-1 text-xs font-mono">
+                      <div className="flex justify-between">
+                        <span className="text-slate-400">Min Distance:</span>
+                        <span className="text-cyan-300 font-bold">{res.minDistance} m</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-slate-400">Max Zone Req:</span>
+                        <span className="text-slate-300">{res.maxRequiredDistance} m</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-slate-400">First Warning:</span>
+                        <span className="text-yellow-400">{res.firstWarningTime !== null ? res.firstWarningTime + 's' : 'None'}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-slate-400">Unsafe Violations:</span>
+                        <span className={res.violationCount > 0 ? 'text-rose-400 font-bold' : 'text-emerald-400'}>{res.violationCount}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-slate-400">Baseline Violations (3.0m):</span>
+                        <span className="text-slate-400">{res.baselineViolations}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-slate-400">Dynamic Stops Avoided:</span>
+                        <span className="text-emerald-400 font-bold">{res.dynamicUnnecessaryStopsAvoided}</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
       )}
 
+      {/* Tab 2: Saved Run History */}
       {activeTab === 'history' && (
-        <div className="bg-slate-800/70 border border-slate-700/70 rounded-xl p-5 space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-slate-200 flex items-center gap-2">
-              <History className="w-4 h-4 text-blue-400" />
-              {t.experiments.history} ({history.length} Runs Persisted)
-            </h2>
-
-            {history.length > 0 && (
+        <div className="space-y-4">
+          <div className="flex justify-between items-center bg-slate-900/60 p-3 rounded-lg border border-slate-800">
+            <span className="text-xs text-slate-400">Total Recorded Runs: <strong className="text-white">{history.length}</strong></span>
+            <div className="flex gap-2">
               <button
-                onClick={handleClearHistory}
-                className="text-xs text-rose-400 hover:text-rose-300 flex items-center gap-1"
+                onClick={exportHistoryCSV}
+                disabled={history.length === 0}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 disabled:opacity-40 text-slate-200 text-xs font-semibold rounded border border-slate-700"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>Export CSV</span>
+              </button>
+              <button
+                onClick={exportHistoryJSON}
+                disabled={history.length === 0}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 disabled:opacity-40 text-slate-200 text-xs font-semibold rounded border border-slate-700"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>Export JSON</span>
+              </button>
+              <button
+                onClick={clearHistory}
+                disabled={history.length === 0}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-rose-950 hover:bg-rose-900 disabled:opacity-40 text-rose-300 text-xs font-semibold rounded border border-rose-800"
               >
                 <Trash2 className="w-3.5 h-3.5" />
-                <span>{t.experiments.clearHistory}</span>
+                <span>Clear All</span>
               </button>
-            )}
+            </div>
           </div>
 
           {history.length === 0 ? (
-            <div className="text-center py-8 text-slate-500 text-xs">
-              No saved experiment runs yet. Run a simulation and click "Save to Experiment History" in the Simulator.
+            <div className="bg-slate-800/40 border border-slate-700/40 rounded-xl p-10 text-center text-slate-400">
+              <History className="w-10 h-10 mx-auto text-slate-600 mb-3" />
+              <p className="text-sm font-semibold text-slate-300">No Simulation Runs Saved Yet</p>
+              <p className="text-xs text-slate-500 mt-1">Run simulations on the Simulator page and click "Save Experiment Record" to log runs.</p>
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs font-mono">
-                <thead>
-                  <tr className="border-b border-slate-700 text-slate-400 uppercase tracking-wider">
-                    <th className="py-2.5 px-3">Run ID</th>
-                    <th className="py-2.5 px-3">Timestamp</th>
-                    <th className="py-2.5 px-3">Scenario</th>
-                    <th className="py-2.5 px-3">Robot Spd</th>
-                    <th className="py-2.5 px-3">Min Dist</th>
-                    <th className="py-2.5 px-3">Max State</th>
-                    <th className="py-2.5 px-3 text-right">Actions</th>
+            <div className="overflow-x-auto bg-slate-800/70 border border-slate-700/70 rounded-xl">
+              <table className="w-full text-left text-xs text-slate-300">
+                <thead className="bg-slate-900/80 text-slate-400 uppercase font-mono text-[11px] border-b border-slate-700">
+                  <tr>
+                    <th className="p-3">Run Time</th>
+                    <th className="p-3">Scenario</th>
+                    <th className="p-3">Environment</th>
+                    <th className="p-3">Duration</th>
+                    <th className="p-3">Min Dist</th>
+                    <th className="p-3">Max Risk</th>
+                    <th className="p-3">Unsafe Count</th>
+                    <th className="p-3 text-right">Actions</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-800">
+                <tbody className="divide-y divide-slate-800 font-mono">
                   {history.map((rec) => (
-                    <tr key={rec.id} className="hover:bg-slate-800/40">
-                      <td className="py-2.5 px-3 text-slate-300">{rec.id}</td>
-                      <td className="py-2.5 px-3 text-slate-400">{rec.timestamp}</td>
-                      <td className="py-2.5 px-3 font-sans font-medium text-slate-200">{rec.scenarioName}</td>
-                      <td className="py-2.5 px-3 text-slate-300">{rec.config.robotSpeed} m/s</td>
-                      <td className="py-2.5 px-3 font-bold text-amber-300">{rec.summary.minDistance} m</td>
-                      <td className="py-2.5 px-3">{getBadge(rec.summary.maxRiskLevel)}</td>
-                      <td className="py-2.5 px-3 text-right">
-                        <div className="flex items-center justify-end gap-2">
-                          <button
-                            onClick={() => setSelectedRecord(rec)}
-                            className="p-1 text-blue-400 hover:text-blue-300 hover:bg-slate-700 rounded transition"
-                            title="View reproducibility parameters"
-                          >
-                            <Eye className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => handleDeleteHistoryItem(rec.id)}
-                            className="p-1 text-rose-400 hover:text-rose-300 hover:bg-rose-950 rounded transition"
-                            title="Delete record"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
+                    <tr key={rec.id} className="hover:bg-slate-700/40">
+                      <td className="p-3 text-slate-400">{new Date(rec.timestamp).toLocaleTimeString()}</td>
+                      <td className="p-3 font-semibold text-white">{rec.scenarioName}</td>
+                      <td className="p-3 text-amber-300">
+                        {rec.config?.environmentalContext ? `μ=${rec.config.environmentalContext.frictionCoefficient}, ${rec.config.environmentalContext.temperature}°C` : 'Nominal'}
+                      </td>
+                      <td className="p-3">{rec.summary.duration}s</td>
+                      <td className="p-3 text-cyan-400">{rec.summary.minDistance.toFixed(2)}m</td>
+                      <td className="p-3">
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                          rec.summary.maxRiskLevel === 'EMERGENCY' ? 'bg-rose-950 text-rose-300' :
+                          rec.summary.maxRiskLevel === 'UNSAFE' ? 'bg-amber-950 text-amber-300' :
+                          rec.summary.maxRiskLevel === 'WARNING' ? 'bg-yellow-950 text-yellow-300' :
+                          'bg-emerald-950 text-emerald-300'
+                        }`}>
+                          {rec.summary.maxRiskLevel}
+                        </span>
+                      </td>
+                      <td className="p-3">{rec.summary.totalUnsafeDuration.toFixed(1)}s</td>
+                      <td className="p-3 text-right">
+                        <button
+                          onClick={() => setSelectedRecord(rec)}
+                          className="px-2 py-1 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded text-[11px] font-sans inline-flex items-center gap-1"
+                        >
+                          <Eye className="w-3 h-3" /> View Details
+                        </button>
                       </td>
                     </tr>
                   ))}
@@ -337,53 +405,47 @@ export const ExperimentsPage: React.FC<ExperimentsPageProps> = ({ language }) =>
         </div>
       )}
 
-      {/* Reproducibility Detail Modal / Drawer */}
+      {/* Selected Run Details Modal */}
       {selectedRecord && (
-        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-700 rounded-xl max-w-2xl w-full p-6 space-y-4 shadow-2xl">
+        <div className="fixed inset-0 z-50 bg-black/75 flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-700 rounded-xl max-w-2xl w-full p-6 space-y-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <div>
-                <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                  <ShieldCheck className="w-4 h-4 text-blue-400" />
-                  Experiment Reproducibility Dossier: {selectedRecord.id}
-                </h3>
-                <span className="text-[11px] text-slate-400">{selectedRecord.scenarioName} — {selectedRecord.timestamp}</span>
+                <h2 className="text-base font-bold text-white">{selectedRecord.scenarioName} - Run Details</h2>
+                <span className="text-xs text-slate-400">{new Date(selectedRecord.timestamp).toLocaleString()} ({selectedRecord.id})</span>
               </div>
               <button
                 onClick={() => setSelectedRecord(null)}
-                className="p-1 text-slate-400 hover:text-white rounded hover:bg-slate-800"
+                className="p-1 rounded text-slate-400 hover:text-white hover:bg-slate-800"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            {/* Config & Outcome Grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs font-mono">
-              <div className="bg-slate-950 p-3 rounded-lg border border-slate-800 space-y-1.5">
-                <span className="text-blue-400 font-bold block mb-1">Configuration Parameters</span>
-                <div>Robot Speed: {selectedRecord.config.robotSpeed} m/s</div>
-                <div>Human Speed: {selectedRecord.config.humanSpeed} m/s</div>
-                <div>Reaction Time: {selectedRecord.config.reactionTime} s</div>
-                <div>Stopping Time: {selectedRecord.config.stoppingTime} s</div>
-                <div>Safety Margin: {selectedRecord.config.safetyMargin} m</div>
-                <div>Human Task: {selectedRecord.config.humanTask}</div>
-              </div>
-
-              <div className="bg-slate-950 p-3 rounded-lg border border-slate-800 space-y-1.5">
-                <span className="text-emerald-400 font-bold block mb-1">Recorded Simulation Outcomes</span>
-                <div>Min Separation: {selectedRecord.summary.minDistance} m</div>
-                <div>Min Safety Margin: {selectedRecord.summary.minSafetyMargin} m</div>
-                <div>1st Warning Time: {selectedRecord.summary.firstWarningTime ?? 'None'}</div>
-                <div>1st Unsafe Time: {selectedRecord.summary.firstUnsafeTime ?? 'None'}</div>
-                <div>Unsafe Duration: {selectedRecord.summary.totalUnsafeDuration} s</div>
-                <div>Max Risk State: {selectedRecord.summary.maxRiskLevel}</div>
-              </div>
+            <div className="grid grid-cols-2 gap-4 text-xs font-mono bg-slate-950 p-4 rounded-lg border border-slate-800">
+              <div><span className="text-slate-400">Duration:</span> {selectedRecord.summary.duration} s</div>
+              <div><span className="text-slate-400">Min Separation Distance:</span> <strong className="text-cyan-400">{selectedRecord.summary.minDistance.toFixed(2)} m</strong></div>
+              <div><span className="text-slate-400">Max Risk Level:</span> <strong className="text-amber-400">{selectedRecord.summary.maxRiskLevel}</strong></div>
+              <div><span className="text-slate-400">Warning Duration:</span> {selectedRecord.summary.totalWarningDuration.toFixed(1)} s</div>
+              <div><span className="text-slate-400">Unsafe Duration:</span> {selectedRecord.summary.totalUnsafeDuration.toFixed(1)} s</div>
+              <div><span className="text-slate-400">Stops Avoided Duration:</span> <strong className="text-emerald-400">{selectedRecord.summary.unnecessaryRestrictionsAvoidedDuration.toFixed(1)} s</strong></div>
+              <div><span className="text-slate-400">Events Recorded:</span> {selectedRecord.summary.eventCount}</div>
+              <div><span className="text-slate-400">Pairs Evaluated:</span> {selectedRecord.summary.multiAgentSummary?.totalPairsEvaluated || 1}</div>
             </div>
 
-            <div className="flex justify-end pt-2">
+            {selectedRecord.config?.environmentalContext && (
+              <div className="bg-slate-800/80 p-3 rounded border border-slate-700 text-xs space-y-1">
+                <div className="font-bold text-amber-300">Environmental Conditions:</div>
+                <div className="font-mono text-slate-300">
+                  Floor: {selectedRecord.config.environmentalContext.floorCondition} (μ={selectedRecord.config.environmentalContext.frictionCoefficient}) • Temp: {selectedRecord.config.environmentalContext.temperature}°C • Sensor Deg: {(selectedRecord.config.environmentalContext.sensorDegradationFactor * 100).toFixed(0)}%
+                </div>
+              </div>
+            )}
+
+            <div className="flex justify-end pt-3 border-t border-slate-800">
               <button
                 onClick={() => setSelectedRecord(null)}
-                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold rounded-lg"
+                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded text-xs font-semibold"
               >
                 Close
               </button>

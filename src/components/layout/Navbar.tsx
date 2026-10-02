@@ -9,11 +9,12 @@ import {
   SlidersHorizontal, 
   AlertTriangle, 
   ClipboardList, 
-  Settings, 
+    Settings, 
   Globe, 
   Wifi, 
   WifiOff, 
   ShieldCheck,
+  UserCheck,
   Menu,
   X
 } from 'lucide-react';
@@ -60,6 +61,7 @@ export const Navbar: React.FC<NavbarProps> = ({
     { id: 'sensitivity', label: t.nav.sensitivity, icon: <SlidersHorizontal className="w-4 h-4" /> },
     { id: 'failure_cases', label: t.nav.failureCases, icon: <AlertTriangle className="w-4 h-4" /> },
     { id: 'data_capture', label: t.nav.dataCapture, icon: <ClipboardList className="w-4 h-4" /> },
+    { id: 'stakeholder_feedback', label: t.nav.stakeholderFeedback, icon: <UserCheck className="w-4 h-4" /> },
     { id: 'settings', label: t.nav.settings, icon: <Settings className="w-4 h-4" /> },
   ];
 

@@ -98,3 +98,20 @@ export function updateHumanMotion(human: HumanEntity, dt: number): HumanEntity {
     status: 'WALKING',
   };
 }
+
+/**
+ * Updates all robots and humans in a multi-agent simulation step
+ */
+export function updateMultiAgentMotion(
+  robots: RobotEntity[],
+  humans: HumanEntity[],
+  dt: number
+): { robots: RobotEntity[]; humans: HumanEntity[] } {
+  const updatedRobots = robots.map((robot) => updateRobotMotion(robot, dt));
+  const updatedHumans = humans.map((human) => updateHumanMotion(human, dt));
+
+  return {
+    robots: updatedRobots,
+    humans: updatedHumans,
+  };
+}

@@ -1,4 +1,5 @@
 // Dynamic Human-Robot Safety-Zone Simulator Data Models
+// Review 2 Phase 2: Multi-Agent Simulation & Environmental Physics
 
 export type RiskLevel = 'SAFE' | 'WARNING' | 'UNSAFE' | 'EMERGENCY';
 
@@ -61,6 +62,7 @@ export interface RobotEntity {
   currentWaypointIndex: number;
   stoppingTime: number; // seconds
   baseRadius: number; // physical footprint radius in meters
+  isActive?: boolean;
 }
 
 export interface HumanEntity {
@@ -76,6 +78,7 @@ export interface HumanEntity {
   path: PathWaypoint[];
   currentWaypointIndex: number;
   reactionTime: number; // seconds
+  isActive?: boolean;
 }
 
 export interface SafetyRuleConfig {
@@ -88,6 +91,21 @@ export interface SafetyRuleConfig {
   taskMultipliers: Record<HumanTaskType, number>;
   useDirectionalFactor: boolean; // Expand zone in the direction of velocity vector
   staticBaselineDistance: number; // Static baseline zone for comparative analysis (m)
+}
+
+export type FloorConditionType =
+  | 'DRY_CLEAN'
+  | 'WET_WASHDOWN'
+  | 'OIL_CHEMICAL_SLICK'
+  | 'COLD_FROST';
+
+export interface EnvironmentalContext {
+  temperature: number; // Celsius (°C), nominal: 25°C
+  pressure: number; // Atmospheric pressure (bar), nominal: 1.013 bar
+  floorCondition: FloorConditionType;
+  frictionCoefficient: number; // Dimensionless (0.15 to 1.0), nominal: 1.0
+  sensorDegradationFactor: number; // Dimensionless (0.0 to 0.70), nominal: 0.0
+  ambientNotes?: string;
 }
 
 export interface SafetyEvaluation {
@@ -105,10 +123,54 @@ export interface SafetyEvaluation {
     reactionComponent: number;
     taskFactor: number;
     safetyMargin: number;
+    frictionCoefficient?: number;
+    ambientMultiplier?: number;
+    sensorDegradationFactor?: number;
+    nominalRequiredDistance?: number;
+    environmentalIncrease?: number;
   };
   relativeVelocity: number;
   isApproaching: boolean;
   timestamp: number;
+}
+
+export type PairType = 'ROBOT_HUMAN' | 'ROBOT_ROBOT' | 'HUMAN_HUMAN';
+
+export interface PairwiseEvaluation {
+  id: string; // e.g. 'R1-H1', 'R1-R2', 'H1-H2'
+  pairType: PairType;
+  entityAId: string;
+  entityAName: string;
+  entityAType: 'robot' | 'human';
+  entityBId: string;
+  entityBName: string;
+  entityBType: 'robot' | 'human';
+  currentDistance: number;
+  requiredDynamicDistance: number;
+  safetyMarginRemaining: number;
+  riskLevel: RiskLevel;
+  isApproaching: boolean;
+  explanation: string;
+  breakdown?: {
+    baseDistance?: number;
+    brakingComponent?: number;
+    reactionComponent?: number;
+    frictionCoefficient?: number;
+    ambientMultiplier?: number;
+    sensorDegradationFactor?: number;
+  };
+}
+
+export interface MultiAgentEvaluationResult {
+  overallRiskLevel: RiskLevel;
+  highestThreatPair: PairwiseEvaluation | null;
+  minimumMarginRemaining: number;
+  activeRobotsCount: number;
+  activeHumansCount: number;
+  totalPairsEvaluated: number;
+  pairwiseEvaluations: PairwiseEvaluation[];
+  evaluationTimeMs: number;
+  overallEvaluation: SafetyEvaluation; // Canonical single-agent evaluation representation
 }
 
 export interface SafetyEvent {
@@ -140,6 +202,9 @@ export interface TelemetrySample {
   safetyMargin: number;
   riskLevel: RiskLevel;
   baselineRiskLevel: RiskLevel;
+  frictionCoefficient?: number;
+  temperature?: number;
+  sensorDegradation?: number;
 }
 
 export interface SimulationRunSummary {
@@ -160,6 +225,14 @@ export interface SimulationRunSummary {
   baselineTimeInZone: number;
   dynamicTimeInZone: number;
   unnecessaryRestrictionsAvoidedDuration: number;
+  environmentalContext?: EnvironmentalContext;
+  multiAgentSummary?: {
+    totalRobots: number;
+    totalHumans: number;
+    totalPairsEvaluated: number;
+    highestThreatPairId: string;
+    meanEvaluationTimeMicroseconds: number;
+  };
 }
 
 export interface ScenarioDefinition {
@@ -169,6 +242,9 @@ export interface ScenarioDefinition {
   expectedOutcome: RiskLevel;
   initialRobot: RobotEntity;
   initialHuman: HumanEntity;
+  robots?: RobotEntity[]; // Multi-agent robot list (>= 2 AMRs)
+  humans?: HumanEntity[]; // Multi-agent human list (>= 2 humans)
+  environment?: EnvironmentalContext;
   safetyRules: SafetyRuleConfig;
   duration: number; // total duration in simulation seconds
 }
@@ -188,6 +264,7 @@ export interface ExperimentRecord {
     humanTask: HumanTaskType;
     useDirectionalFactor: boolean;
     staticBaselineDistance: number;
+    environmentalContext?: EnvironmentalContext;
   };
   summary: SimulationRunSummary;
 }
@@ -207,6 +284,8 @@ export interface ExperimentSummary {
   dynamicUnnecessaryStopsAvoided: number;
   baselineViolations: number;
   timestamp: string;
+  environmentalCondition?: string;
+  isMultiAgent?: boolean;
 }
 
 export interface SensitivityDataPoint {
@@ -216,6 +295,7 @@ export interface SensitivityDataPoint {
   riskLevel: RiskLevel;
   unsafeTime: number | null;
   unsafeDuration: number;
+  changeFromNominal?: number;
 }
 
 export interface DecisionTransition {
@@ -228,18 +308,34 @@ export interface DecisionTransition {
 
 export interface FieldObservation {
   id: string;
-  scenarioId: string;
   timestamp: string;
-  location: string;
-  robotId: string;
-  humanTask: HumanTaskType;
-  robotSpeed: number;
-  humanSpeed: number;
-  observedProximity: number;
-  safetyCondition: RiskLevel;
-  notes: string;
+  scenarioId?: string;
+  location?: string;
+  locationArea?: string;
+  robotId?: string;
+  robotSpeed?: number;
+  robotSpeedObserved?: number;
+  humanTask?: string;
+  taskObserved?: HumanTaskType;
+  humanSpeed?: number;
+  observedProximity?: number;
+  humanDistanceEstimated?: number;
+  safetyCondition?: string;
+  riskRating?: 'Low' | 'Medium' | 'High' | 'Critical';
   capturedBy?: string;
+  observerName?: string;
+  role?: string;
+  environmentCondition?: string;
   synced?: boolean;
+  notes: string;
+}
+
+export interface AppStats {
+  totalSimulationsRun: number;
+  totalViolationsLogged: number;
+  averageSafetyMargin: number;
+  scenariosTested: number;
+  lastUpdated: string;
 }
 
 export type NavPage = 
@@ -252,4 +348,58 @@ export type NavPage =
   | 'sensitivity' 
   | 'failure_cases' 
   | 'data_capture' 
+  | 'stakeholder_feedback' 
   | 'settings';
+
+export type StakeholderRole = 
+  | 'EHS_MANAGER' 
+  | 'PLANT_OPERATOR' 
+  | 'MAINTENANCE_ENGINEER' 
+  | 'OTHER';
+
+export type LikertScore = 1 | 2 | 3 | 4 | 5;
+
+export interface StakeholderLikertResponses {
+  q1_clarity: number;
+  q2_warning_reasons: number;
+  q3_environmental_controls: number;
+  q4_multi_agent_threat: number;
+  q5_static_vs_dynamic: number;
+  q6_ui_usability: number;
+  q7_process_plant_usefulness: number;
+  q8_configurability: number;
+  q9_bilingual_support: number;
+  q10_overall_utility: number;
+}
+
+export interface StakeholderQualitativeFeedback {
+  easyToUnderstand?: string;
+  difficultToUnderstand?: string;
+  mostUsefulFeature?: string;
+  featureNeedingImprovement?: string;
+  additionalInfoNeeded?: string;
+  additionalComments?: string;
+}
+
+export interface StakeholderEvaluation {
+  id: string;
+  timestamp: string;
+  role: StakeholderRole;
+  roleOtherText?: string;
+  scenarioEvaluated?: string;
+  simulationMode?: 'SINGLE_AGENT' | 'MULTI_AGENT';
+  environmentalCondition?: string;
+  durationSeconds?: number;
+  likertScores: StakeholderLikertResponses;
+  qualitative: StakeholderQualitativeFeedback;
+  isComplete: boolean;
+}
+
+export interface StakeholderValidationSummary {
+  status: 'PENDING_ACTUAL_TRIALS' | 'IN_PROGRESS' | 'RESPONSES_AVAILABLE';
+  totalResponses: number;
+  completedEvaluations: number;
+  roleDistribution: Record<StakeholderRole, number>;
+  averageScores?: Record<keyof StakeholderLikertResponses, number>;
+  overallAverageScore?: number;
+}

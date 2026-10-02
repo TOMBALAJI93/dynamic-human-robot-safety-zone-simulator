@@ -349,7 +349,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate, langua
                   <td className="py-2.5 px-3 text-slate-300">{obs.humanTask}</td>
                   <td className="py-2.5 px-3 font-mono text-slate-300">{obs.robotSpeed} m/s</td>
                   <td className="py-2.5 px-3 font-mono font-semibold text-slate-200">{obs.observedProximity} m</td>
-                  <td className="py-2.5 px-3">{getRiskBadge(obs.safetyCondition)}</td>
+                  <td className="py-2.5 px-3">{getRiskBadge((obs.safetyCondition as RiskLevel) || 'SAFE')}</td>
                 </tr>
               ))}
             </tbody>

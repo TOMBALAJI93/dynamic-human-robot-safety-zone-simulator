@@ -4,10 +4,14 @@ import type {
   ExperimentRecord, 
   PlantLayout, 
   SafetyRuleConfig, 
-  TelemetrySample 
+  EnvironmentalContext,
+  StakeholderEvaluation,
+  StakeholderValidationSummary,
+  StakeholderRole,
+  StakeholderLikertResponses
 } from '../types';
 import { DEFAULT_PLANT_LAYOUT } from '../engine/scenarios/scenarioData';
-import { DEFAULT_SAFETY_RULES } from '../engine/safety/safetyEngine';
+import { DEFAULT_SAFETY_RULES, DEFAULT_ENVIRONMENT_CONFIG } from '../engine/safety/safetyEngine';
 import type { Language } from '../i18n/translations';
 
 const STORAGE_KEYS = {
@@ -16,8 +20,10 @@ const STORAGE_KEYS = {
   EXPERIMENT_HISTORY: 'safety_simulator_exp_history_v2',
   SAVED_LAYOUT: 'safety_simulator_plant_layout_v2',
   SAFETY_RULES: 'safety_simulator_safety_rules_v2',
+  ENVIRONMENT_CONFIG: 'safety_simulator_environment_v2',
   LANGUAGE: 'safety_simulator_language_v2',
   SIMULATION_STATS: 'safety_simulator_stats_v2',
+  STAKEHOLDER_EVALUATIONS: 'safety_simulator_stakeholder_evals_v2',
 };
 
 export interface AppStats {
@@ -181,7 +187,25 @@ export const storageService = {
     localStorage.setItem(STORAGE_KEYS.SAFETY_RULES, JSON.stringify(rules));
   },
 
-  /* ---------------- CSV Export Helpers ---------------- */
+  getEnvironmentConfig(): EnvironmentalContext {
+    const raw = localStorage.getItem(STORAGE_KEYS.ENVIRONMENT_CONFIG);
+    if (!raw) return DEFAULT_ENVIRONMENT_CONFIG;
+    try {
+      return JSON.parse(raw);
+    } catch {
+      return DEFAULT_ENVIRONMENT_CONFIG;
+    }
+  },
+
+  saveEnvironmentConfig(env: EnvironmentalContext): void {
+    localStorage.setItem(STORAGE_KEYS.ENVIRONMENT_CONFIG, JSON.stringify(env));
+  },
+
+  clearAllStorage(): void {
+    localStorage.clear();
+  },
+
+  /* ---------------- CSV & JSON Export Helpers ---------------- */
 
   exportExperimentsToCSV(records: ExperimentRecord[]): string {
     const headers = [
@@ -194,20 +218,16 @@ export const storageService = {
       'Stopping Time (s)',
       'Safety Margin (m)',
       'Base Distance (m)',
-      'Human Task',
+      'Duration (s)',
       'Min Distance (m)',
-      'Min Safety Margin (m)',
-      '1st Warning Time (s)',
-      '1st Unsafe Time (s)',
-      'Unsafe Duration (s)',
       'Max Risk Level',
-      'Unnecessary Stops Avoided Duration (s)',
-      'Event Count',
+      'Events Count',
+      'Unnecessary Stops Avoided (s)',
     ];
 
     const rows = records.map((r) => [
-      `"${r.id}"`,
-      `"${r.timestamp}"`,
+      r.id,
+      r.timestamp,
       `"${r.scenarioName}"`,
       r.config.robotSpeed,
       r.config.humanSpeed,
@@ -215,59 +235,20 @@ export const storageService = {
       r.config.stoppingTime,
       r.config.safetyMargin,
       r.config.baseDistance,
-      `"${r.config.humanTask}"`,
+      r.summary.duration,
       r.summary.minDistance,
-      r.summary.minSafetyMargin,
-      r.summary.firstWarningTime ?? 'None',
-      r.summary.firstUnsafeTime ?? 'None',
-      r.summary.totalUnsafeDuration,
-      `"${r.summary.maxRiskLevel}"`,
-      r.summary.unnecessaryRestrictionsAvoidedDuration,
+      r.summary.maxRiskLevel,
       r.summary.eventCount,
+      r.summary.unnecessaryRestrictionsAvoidedDuration,
     ]);
 
     return [headers.join(','), ...rows.map((row) => row.join(','))].join('\n');
   },
 
-  exportTelemetryToCSV(telemetry: TelemetrySample[], scenarioName: string = 'Simulation'): string {
-    const headers = [
-      'Simulation Time (s)',
-      'Robot X (m)',
-      'Robot Y (m)',
-      'Human X (m)',
-      'Human Y (m)',
-      'Robot Speed (m/s)',
-      'Human Speed (m/s)',
-      'Current Distance (m)',
-      'Required Dynamic Distance (m)',
-      'Static Baseline Distance (m)',
-      'Safety Margin (m)',
-      'Risk Level',
-      'Baseline Risk Level',
-    ];
-
-    const rows = telemetry.map((t) => [
-      t.time,
-      t.robotX,
-      t.robotY,
-      t.humanX,
-      t.humanY,
-      t.robotSpeed,
-      t.humanSpeed,
-      t.distance,
-      t.requiredDistance,
-      t.staticBaselineDistance,
-      t.safetyMargin,
-      `"${t.riskLevel}"`,
-      `"${t.baselineRiskLevel}"`,
-    ]);
-
-    return [`# Telemetry Export for ${scenarioName}`, headers.join(','), ...rows.map((row) => row.join(','))].join('\n');
-  },
-
-  exportFieldObservationsToCSV(observations: FieldObservation[]): string {
+  exportFieldObservationsToCSV(obs: FieldObservation[]): string {
     const headers = [
       'Observation ID',
+      'Scenario',
       'Timestamp',
       'Location',
       'Robot ID',
@@ -276,22 +257,23 @@ export const storageService = {
       'Human Speed (m/s)',
       'Observed Proximity (m)',
       'Safety Condition',
-      'Captured By',
       'Notes',
+      'Captured By',
     ];
 
-    const rows = observations.map((o) => [
-      `"${o.id}"`,
-      `"${o.timestamp}"`,
+    const rows = obs.map((o) => [
+      o.id,
+      o.scenarioId,
+      o.timestamp,
       `"${o.location}"`,
-      `"${o.robotId}"`,
-      `"${o.humanTask}"`,
+      o.robotId,
+      o.humanTask,
       o.robotSpeed,
       o.humanSpeed,
       o.observedProximity,
-      `"${o.safetyCondition}"`,
-      `"${o.capturedBy ?? ''}"`,
-      `"${(o.notes ?? '').replace(/"/g, '""')}"`,
+      o.safetyCondition,
+      `"${o.notes.replace(/"/g, '""')}"`,
+      o.capturedBy || 'Anonymous',
     ]);
 
     return [headers.join(','), ...rows.map((row) => row.join(','))].join('\n');
@@ -299,6 +281,203 @@ export const storageService = {
 
   downloadCSV(content: string, filename: string): void {
     const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', filename);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  },
+
+
+  // --- Stakeholder Evaluation Module ---
+
+  getStakeholderEvaluations(): StakeholderEvaluation[] {
+    try {
+      const data = localStorage.getItem(STORAGE_KEYS.STAKEHOLDER_EVALUATIONS);
+      if (!data) return [];
+      const parsed = JSON.parse(data);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (e) {
+      console.error('Failed to load stakeholder evaluations:', e);
+      return [];
+    }
+  },
+
+  saveStakeholderEvaluation(evaluation: StakeholderEvaluation): boolean {
+    try {
+      const existing = this.getStakeholderEvaluations();
+      const updated = [evaluation, ...existing.filter(e => e.id !== evaluation.id)];
+      localStorage.setItem(STORAGE_KEYS.STAKEHOLDER_EVALUATIONS, JSON.stringify(updated));
+      return true;
+    } catch (e) {
+      console.error('Failed to save stakeholder evaluation:', e);
+      return false;
+    }
+  },
+
+  clearStakeholderEvaluations(): void {
+    try {
+      localStorage.removeItem(STORAGE_KEYS.STAKEHOLDER_EVALUATIONS);
+    } catch (e) {
+      console.error('Failed to clear stakeholder evaluations:', e);
+    }
+  },
+
+  getStakeholderSummary(evals?: StakeholderEvaluation[]): StakeholderValidationSummary {
+    const list = evals || this.getStakeholderEvaluations();
+    const total = list.length;
+    const completed = list.filter(e => e.isComplete).length;
+
+    const roleDistribution: Record<StakeholderRole, number> = {
+      EHS_MANAGER: 0,
+      PLANT_OPERATOR: 0,
+      MAINTENANCE_ENGINEER: 0,
+      OTHER: 0,
+    };
+
+    list.forEach(e => {
+      if (roleDistribution[e.role] !== undefined) {
+        roleDistribution[e.role]++;
+      } else {
+        roleDistribution.OTHER++;
+      }
+    });
+
+    if (completed === 0) {
+      return {
+        status: total > 0 ? 'IN_PROGRESS' : 'PENDING_ACTUAL_TRIALS',
+        totalResponses: total,
+        completedEvaluations: 0,
+        roleDistribution,
+      };
+    }
+
+    const questionKeys: (keyof StakeholderLikertResponses)[] = [
+      'q1_clarity',
+      'q2_warning_reasons',
+      'q3_environmental_controls',
+      'q4_multi_agent_threat',
+      'q5_static_vs_dynamic',
+      'q6_ui_usability',
+      'q7_process_plant_usefulness',
+      'q8_configurability',
+      'q9_bilingual_support',
+      'q10_overall_utility',
+    ];
+
+    const sums: Record<keyof StakeholderLikertResponses, number> = {
+      q1_clarity: 0,
+      q2_warning_reasons: 0,
+      q3_environmental_controls: 0,
+      q4_multi_agent_threat: 0,
+      q5_static_vs_dynamic: 0,
+      q6_ui_usability: 0,
+      q7_process_plant_usefulness: 0,
+      q8_configurability: 0,
+      q9_bilingual_support: 0,
+      q10_overall_utility: 0,
+    };
+
+    const completedList = list.filter(e => e.isComplete);
+    completedList.forEach(e => {
+      questionKeys.forEach(k => {
+        sums[k] += Number(e.likertScores[k]) || 0;
+      });
+    });
+
+    const averageScores: Record<keyof StakeholderLikertResponses, number> = {} as any;
+    let totalAllQuestions = 0;
+
+    questionKeys.forEach(k => {
+      const avg = Number((sums[k] / completedList.length).toFixed(2));
+      averageScores[k] = avg;
+      totalAllQuestions += avg;
+    });
+
+    const overallAverageScore = Number((totalAllQuestions / questionKeys.length).toFixed(2));
+
+    return {
+      status: 'RESPONSES_AVAILABLE',
+      totalResponses: total,
+      completedEvaluations: completed,
+      roleDistribution,
+      averageScores,
+      overallAverageScore,
+    };
+  },
+
+  exportStakeholderToCSV(evals?: StakeholderEvaluation[]): string {
+    const list = evals || this.getStakeholderEvaluations();
+    const headers = [
+      'Evaluation_ID',
+      'Timestamp',
+      'Role',
+      'Role_Custom',
+      'Scenario',
+      'Simulation_Mode',
+      'Environment_Condition',
+      'Duration_Seconds',
+      'Is_Complete',
+      'Q1_Clarity',
+      'Q2_Warning_Reasons',
+      'Q3_Environmental_Controls',
+      'Q4_Multi_Agent_Threat',
+      'Q5_Static_vs_Dynamic',
+      'Q6_UI_Usability',
+      'Q7_Plant_Usefulness',
+      'Q8_Configurability',
+      'Q9_Bilingual_Support',
+      'Q10_Overall_Utility',
+      'Easy_To_Understand',
+      'Difficult_To_Understand',
+      'Most_Useful_Feature',
+      'Feature_Needing_Improvement',
+      'Additional_Info_Needed',
+      'Additional_Comments'
+    ];
+
+    const rows = list.map(e => [
+      e.id,
+      e.timestamp,
+      e.role,
+      '"' + (e.roleOtherText || '').replace(/"/g, '""') + '"',
+      '"' + (e.scenarioEvaluated || 'None').replace(/"/g, '""') + '"',
+      e.simulationMode || 'N/A',
+      '"' + (e.environmentalCondition || 'N/A').replace(/"/g, '""') + '"',
+      e.durationSeconds || 0,
+      e.isComplete ? 'TRUE' : 'FALSE',
+      e.likertScores.q1_clarity,
+      e.likertScores.q2_warning_reasons,
+      e.likertScores.q3_environmental_controls,
+      e.likertScores.q4_multi_agent_threat,
+      e.likertScores.q5_static_vs_dynamic,
+      e.likertScores.q6_ui_usability,
+      e.likertScores.q7_process_plant_usefulness,
+      e.likertScores.q8_configurability,
+      e.likertScores.q9_bilingual_support,
+      e.likertScores.q10_overall_utility,
+      '"' + (e.qualitative.easyToUnderstand || '').replace(/"/g, '""') + '"',
+      '"' + (e.qualitative.difficultToUnderstand || '').replace(/"/g, '""') + '"',
+      '"' + (e.qualitative.mostUsefulFeature || '').replace(/"/g, '""') + '"',
+      '"' + (e.qualitative.featureNeedingImprovement || '').replace(/"/g, '""') + '"',
+      '"' + (e.qualitative.additionalInfoNeeded || '').replace(/"/g, '""') + '"',
+      '"' + (e.qualitative.additionalComments || '').replace(/"/g, '""') + '"'
+    ]);
+
+    return [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+  },
+
+  exportStakeholderToJSON(evals?: StakeholderEvaluation[]): string {
+    const list = evals || this.getStakeholderEvaluations();
+    return JSON.stringify(list, null, 2);
+  },
+
+  downloadJSON(data: unknown, filename: string): void {
+    const content = JSON.stringify(data, null, 2);
+    const blob = new Blob([content], { type: 'application/json;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.setAttribute('href', url);

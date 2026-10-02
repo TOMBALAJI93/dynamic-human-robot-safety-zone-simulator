@@ -12,6 +12,7 @@ import { ExperimentsPage } from './pages/ExperimentsPage';
 import { SensitivityPage } from './pages/SensitivityPage';
 import { FailureCasesPage } from './pages/FailureCasesPage';
 import { DataCapturePage } from './pages/DataCapturePage';
+import { StakeholderFeedbackPage } from './pages/StakeholderFeedbackPage';
 import { SettingsPage } from './pages/SettingsPage';
 
 export function App() {
@@ -43,6 +44,8 @@ export function App() {
         return <FailureCasesPage onNavigate={setCurrentPage} language={language} />;
       case 'data_capture':
         return <DataCapturePage language={language} />;
+      case 'stakeholder_feedback':
+        return <StakeholderFeedbackPage language={language} />;
       case 'settings':
         return <SettingsPage language={language} onLanguageChange={handleLanguageChange} />;
       default:
