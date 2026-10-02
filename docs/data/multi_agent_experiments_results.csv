@@ -1,4 +1,4 @@
 ScenarioId,ScenarioName,Friction_mu,Temp_C,SensorDeg_eta,TotalRobots,TotalHumans,TotalPairs,MinSeparation_m,MaxRequired_m,HighestThreatPair,PeakRiskLevel,FirstWarningTime_s,FirstUnsafeTime_s,UnsafeDuration_s,MeanEvalLatency_us,MaxEvalLatency_us
-sc-multi-01-cross,"MULTI-01: Two AMRs Crossing Intersection (2 AMRs + 2 Humans)",1,25,0,2,2,6,0.05,7.05,amr-01-amr-02,EMERGENCY,23.4,25.1,4.9,113,2759
-sc-multi-02-aisle,"MULTI-02: AMR Through Worker-Heavy Aisle (1 AMR + 2 Humans)",1,25,0,1,2,3,2,8.65,amr-01-human-01,UNSAFE,12.2,13.8,4.5,46,792
-sc-multi-03-converge,"MULTI-03: Multi-Agent Process Plant Convergence (2 AMRs + 2 Humans)",0.65,30,0.1,2,2,6,0.02,10.03,amr-01-human-01,EMERGENCY,14.3,17,7.1,69,603
+sc-multi-01-cross,"MULTI-01: Two AMRs Crossing Intersection (2 AMRs + 2 Humans)",1,25,0,2,2,6,0.05,7.05,amr-01-amr-02,EMERGENCY,23.4,25.1,4.9,38,930
+sc-multi-02-aisle,"MULTI-02: AMR Through Worker-Heavy Aisle (1 AMR + 2 Humans)",1,25,0,1,2,3,2,8.65,amr-01-human-01,UNSAFE,12.2,13.8,4.5,16,99
+sc-multi-03-converge,"MULTI-03: Multi-Agent Process Plant Convergence (2 AMRs + 2 Humans)",0.65,30,0.1,2,2,6,0.02,10.03,amr-01-human-01,EMERGENCY,14.3,17,7.1,28,386

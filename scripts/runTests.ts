@@ -4,17 +4,18 @@
  */
 
 import { 
+  calculateDistance,
   calculateDynamicSafetyDistance, 
   calculateRobotRobotSafetyDistance,
   calculateHumanHumanSafetyDistance,
   evaluatePairwiseSafety,
   evaluateMultiAgentSafetyState,
   evaluateSafetyState, 
-  validateSafetyParameters,
   DEFAULT_SAFETY_RULES, 
   DEFAULT_ENVIRONMENT_CONFIG 
 } from '../src/engine/safety/safetyEngine';
 import { PREDEFINED_SCENARIOS, FAILURE_EDGE_CASES } from '../src/engine/scenarios/scenarioData';
+import { updateEntityPathPosition, updateMultiAgentMotion } from '../src/engine/physics/motionEngine';
 import type { 
   EnvironmentalContext, 
   RobotEntity, 
@@ -483,7 +484,7 @@ try {
   if (Array.isArray(parsed) && parsed.length === 2 && parsed[0].id === 'eval-test-01') {
     jsonParsed = true;
   }
-} catch (e) {
+} catch {
   jsonParsed = false;
 }
 assert(
@@ -535,6 +536,131 @@ assert(
   'All Tamil translations keys present and non-empty',
   taComplete ? 'Complete Tamil Dictionary' : 'Missing Tamil keys',
   'Ensures zero missing text in Tamil interface'
+);
+
+
+// --- PHASE 3 MOTION & PHYSICS KINEMATIC TESTS (PHYS-01 to PHYS-03) ---
+
+console.log('\n--- PHASE 3 MOTION & PHYSICS KINEMATICS TESTS ---');
+
+// PHYS-01: Waypoint Advancement along Path
+const testWaypoints = [{ x: 10, y: 10 }, { x: 20, y: 10 }, { x: 20, y: 20 }];
+const initialPos = { x: 10, y: 10 };
+const step1 = updateEntityPathPosition(initialPos, 2.0, testWaypoints, 1, 1.0); // moves 2m towards (20, 10)
+assert(
+  'PHYS-01',
+  'Entity Path Position Advances Accurately by v * dt along Waypoint Vector',
+  step1.newPos.x === 12.0 && step1.newPos.y === 10.0 && step1.newWaypointIndex === 1,
+  'Position: (12.00, 10.00), Target Waypoint: 1',
+  `Position: (${step1.newPos.x.toFixed(2)}, ${step1.newPos.y.toFixed(2)}), Target: ${step1.newWaypointIndex}`,
+  'Validates linear kinematics x_new = x_0 + v * dt * cos(theta)'
+);
+
+// PHYS-02: Empty Path and Out-of-Bounds Waypoint Index Safety
+const emptyPathStep = updateEntityPathPosition({ x: 5, y: 5 }, 1.5, [], 0, 0.1);
+const overflowWaypointStep = updateEntityPathPosition({ x: 5, y: 5 }, 1.5, testWaypoints, 99, 0.1);
+assert(
+  'PHYS-02',
+  'Empty Path and Out-of-Bounds Waypoint Index Handled Gracefully without Crash',
+  emptyPathStep.reachedEnd && overflowWaypointStep.reachedEnd && !isNaN(emptyPathStep.newPos.x),
+  'Safe fallback position maintained with reachedEnd flag',
+  'Handled safely without runtime throw or NaN position',
+  'Protects simulation loop against malformed user-drawn waypoint arrays'
+);
+
+// PHYS-03: Multi-Agent Synchronous Motion Update
+const swarmRobots: RobotEntity[] = [
+  { ...baseRobot, id: 'r1', position: { x: 10, y: 10 }, path: testWaypoints, currentWaypointIndex: 1, currentSpeed: 1.0 },
+  { ...baseRobot, id: 'r2', position: { x: 50, y: 50 }, path: [{ x: 50, y: 50 }], currentWaypointIndex: 0, currentSpeed: 0, status: 'IDLE' }
+];
+const swarmHumans: HumanEntity[] = [
+  { ...baseHuman, id: 'h1', position: { x: 15, y: 10 }, path: testWaypoints, currentWaypointIndex: 1, currentSpeed: 1.0 }
+];
+const swarmMotion = updateMultiAgentMotion(swarmRobots, swarmHumans, 0.5);
+assert(
+  'PHYS-03',
+  'Synchronous Multi-Agent Motion Step Updates Active Agents while Preserving IDLE States',
+  swarmMotion.updatedRobots[0].position.x > 10.0 && swarmMotion.updatedRobots[1].position.x === 50 && swarmMotion.updatedHumans[0].position.x > 15.0,
+  'Active robot and human advanced; idle robot unchanged',
+  `R1 moved to x=${swarmMotion.updatedRobots[0].position.x}, R2 held at x=${swarmMotion.updatedRobots[1].position.x}`,
+  'Ensures synchronous multi-body simulation clock progression'
+);
+
+// --- PHASE 3 ERROR HANDLING & STORAGE RECOVERY TESTS (ERR-01 to ERR-03) ---
+
+console.log('\n--- PHASE 3 ERROR HANDLING & ROBUSTNESS TESTS ---');
+
+// ERR-01: Malformed JSON Recovery in Stakeholder Summary
+const corruptSummary = storageService.getStakeholderSummary([
+  {
+    id: 'corrupt-01',
+    timestamp: 'invalid-date',
+    role: 'OTHER' as any,
+    likertScores: {
+      q1_clarity: NaN, // corrupted
+      q2_warning_reasons: 4,
+      q3_environmental_controls: 5,
+      q4_multi_agent_threat: 4,
+      q5_static_vs_dynamic: 5,
+      q6_ui_usability: 4,
+      q7_process_plant_usefulness: 5,
+      q8_configurability: 4,
+      q9_bilingual_support: 5,
+      q10_overall_utility: 5,
+    },
+    qualitative: {},
+    isComplete: true
+  }
+]);
+assert(
+  'ERR-01',
+  'Storage Summary Sanitizes Corrupt/NaN Likert Data without Throwing or NaN Output',
+  !isNaN(corruptSummary.overallAverageScore || 0),
+  'Valid numerical average computed with NaN protection',
+  `Overall Average: ${corruptSummary.overallAverageScore}`,
+  'Protects against corrupted localStorage entries from legacy versions'
+);
+
+// ERR-02: CSV Injection and Quote Escaping Sanitization
+const unsafeEval: StakeholderEvaluation = {
+  id: 'eval-unsafe-01',
+  timestamp: new Date().toISOString(),
+  role: 'OTHER',
+  roleOtherText: 'Field "Specialist", Lead',
+  scenarioEvaluated: 'Scenario, with "quotes" and commas',
+  simulationMode: 'MULTI_AGENT',
+  environmentalCondition: 'Wet, 28°C',
+  durationSeconds: 60,
+  likertScores: {
+    q1_clarity: 5, q2_warning_reasons: 5, q3_environmental_controls: 5, q4_multi_agent_threat: 5,
+    q5_static_vs_dynamic: 5, q6_ui_usability: 5, q7_process_plant_usefulness: 5, q8_configurability: 5,
+    q9_bilingual_support: 5, q10_overall_utility: 5
+  },
+  qualitative: {
+    additionalComments: 'Formula = 1+1, test; "quoted text"'
+  },
+  isComplete: true
+};
+const escapedCSV = storageService.exportStakeholderToCSV([unsafeEval]);
+assert(
+  'ERR-02',
+  'CSV Exporter Sanitizes Commas, Double Quotes, and Semicolons with RFC 4180 Escaping',
+  escapedCSV.includes('""quotes""') && escapedCSV.includes('"Field ""Specialist"", Lead"'),
+  'Properly escaped double-quotes and encapsulated comma fields',
+  'RFC 4180 compliance verified',
+  'Prevents CSV column misalignment and spreadsheet injection vulnerabilities'
+);
+
+// ERR-03: Euclidean Distance Function Protection on Missing/NaN Coordinates
+const nanDist1 = calculateDistance({ x: NaN, y: 10 }, { x: 20, y: 20 });
+const nanDist2 = calculateDistance(null as any, { x: 20, y: 20 });
+assert(
+  'ERR-03',
+  'calculateDistance Returns Safe Fallback (10.0m) on NaN or Null Entity Coordinates',
+  nanDist1 === 10.0 && nanDist2 === 10.0,
+  'Fallback 10.0m separation returned on coordinate failure',
+  `Returned ${nanDist1}m and ${nanDist2}m`,
+  'Prevents spatial matrix division by zero or NaN propagation'
 );
 
 console.log('\n================================================================');

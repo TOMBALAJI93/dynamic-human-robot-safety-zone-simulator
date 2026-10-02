@@ -1,7 +1,25 @@
 import type { Point2D, PathWaypoint, RobotEntity, HumanEntity } from '../../types';
 
 /**
- * Moves an entity along its predefined path waypoints smoothly based on elapsed time dt (seconds)
+ * Updates an entity position along a piecewise linear waypoint path.
+ * 
+ * Kinematic Rationale:
+ * AMRs and workers in process plant aisles follow defined transit pathways.
+ * This function calculates linear interpolation between discrete waypoint coordinates (x, y),
+ * advancing the entity by stepDistance = currentSpeed * dt.
+ * 
+ * Safety & Boundary Protections:
+ * - If path is empty, retains current coordinates without crashing.
+ * - Handles distanceToTarget < 0.1m by safely indexing to next waypoint.
+ * - Prevents overshoot by clamping moveFraction to distanceToTarget.
+ * - Coordinates rounded to 3 decimal places (millimeter precision) to eliminate floating-point creep.
+ * 
+ * @param currentPos Current (x, y) coordinates in plant meters
+ * @param currentSpeed Instantaneous velocity in meters per second (m/s >= 0)
+ * @param path Array of PathWaypoints defining traversal route
+ * @param currentWaypointIndex Target waypoint index in path
+ * @param dt Simulation timestep in seconds (nominal: 0.1s at 10Hz)
+ * @returns Updated coordinates, new waypoint index, heading direction (radians), and completion flag
  */
 export function updateEntityPathPosition(
   currentPos: Point2D,
@@ -14,10 +32,14 @@ export function updateEntityPathPosition(
     return { newPos: { ...currentPos }, newWaypointIndex: 0, direction: 0, reachedEnd: true };
   }
 
+  // Sanitize index out of bounds
   if (currentWaypointIndex >= path.length) {
     const lastPoint = path[path.length - 1];
     return { newPos: { ...lastPoint }, newWaypointIndex: path.length - 1, direction: 0, reachedEnd: true };
   }
+
+  const safeSpeed = Math.max(0, isNaN(currentSpeed) ? 0 : currentSpeed);
+  const safeDt = Math.max(0, isNaN(dt) ? 0.1 : dt);
 
   const target = path[currentWaypointIndex];
   const dx = target.x - currentPos.x;
@@ -25,8 +47,9 @@ export function updateEntityPathPosition(
   const distanceToTarget = Math.sqrt(dx * dx + dy * dy);
   const direction = Math.atan2(dy, dx);
 
-  const stepDistance = currentSpeed * dt;
+  const stepDistance = safeSpeed * safeDt;
 
+  // Waypoint reached threshold (0.1m or full step completion)
   if (distanceToTarget <= stepDistance || distanceToTarget < 0.1) {
     const nextIndex = (currentWaypointIndex + 1) % path.length;
     return {
@@ -50,7 +73,15 @@ export function updateEntityPathPosition(
 }
 
 /**
- * Updates robot motion state during simulation frame
+ * Advances a single AMR's position, heading, and status for one simulation step.
+ * 
+ * State Gating:
+ * - IDLE, EMERGENCY_STOP, or PAUSED robots do not advance position.
+ * - Under EMERGENCY_STOP, velocity is forced to 0.0 m/s.
+ * 
+ * @param robot AMR state object
+ * @param dt Time step in seconds
+ * @returns Updated RobotEntity
  */
 export function updateRobotMotion(robot: RobotEntity, dt: number): RobotEntity {
   if (robot.status === 'IDLE' || robot.status === 'EMERGENCY_STOP' || robot.status === 'PAUSED') {
@@ -75,7 +106,14 @@ export function updateRobotMotion(robot: RobotEntity, dt: number): RobotEntity {
 }
 
 /**
- * Updates human motion state during simulation frame
+ * Advances a human worker's position, heading, and status for one simulation step.
+ * 
+ * State Gating:
+ * - Stationary tasks (IDLE, WORKING at valve station) maintain fixed positions.
+ * 
+ * @param human Human worker state object
+ * @param dt Time step in seconds
+ * @returns Updated HumanEntity
  */
 export function updateHumanMotion(human: HumanEntity, dt: number): HumanEntity {
   if (human.status === 'IDLE' || human.status === 'WORKING') {
@@ -100,18 +138,30 @@ export function updateHumanMotion(human: HumanEntity, dt: number): HumanEntity {
 }
 
 /**
- * Updates all robots and humans in a multi-agent simulation step
+ * Synchronous multi-agent swarm motion updater.
+ * Iterates through all active AMRs and human workers, updating kinematics synchronously.
+ * 
+ * @param robots Array of AMRs in the simulation
+ * @param humans Array of human workers in the simulation
+ * @param dt Timestep in seconds
+ * @returns Tuple of updated [robots, humans]
  */
 export function updateMultiAgentMotion(
   robots: RobotEntity[],
   humans: HumanEntity[],
   dt: number
-): { robots: RobotEntity[]; humans: HumanEntity[] } {
-  const updatedRobots = robots.map((robot) => updateRobotMotion(robot, dt));
-  const updatedHumans = humans.map((human) => updateHumanMotion(human, dt));
-
-  return {
-    robots: updatedRobots,
-    humans: updatedHumans,
+): { 
+  robots: RobotEntity[]; 
+  humans: HumanEntity[]; 
+  updatedRobots: RobotEntity[]; 
+  updatedHumans: HumanEntity[]; 
+} {
+  const updatedRobots = (robots || []).map(r => r.isActive !== false ? updateRobotMotion(r, dt) : r);
+  const updatedHumans = (humans || []).map(h => h.isActive !== false ? updateHumanMotion(h, dt) : h);
+  return { 
+    robots: updatedRobots, 
+    humans: updatedHumans, 
+    updatedRobots, 
+    updatedHumans 
   };
 }

@@ -29,9 +29,9 @@ Measured from `scripts/runMultiAgentExperiment.ts`:
 
 | Experiment ID | Scenario Name | Active Agents | Friction ($\mu$) | Temp ($^\circ$C) | Noise ($\eta$) | Min Sep | Max Req ($D_{\text{req}}$) | Critical Threat Pair | Peak State | Time 1st Warn | Time 1st Unsafe | Unsafe Dur | Mean Latency | Max Latency |
 | :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-| **MULTI-EXP-01** | MULTI-01: Intersection Crossing | 2 AMRs + 2 Humans (6 pairs) | 1.00 | 25 | 0.00 | **0.05 m** | **7.05 m** | AMR-01 ↔ AMR-02 | **EMERGENCY** | 23.4 s | 25.1 s | 4.9 s | **113 $\mu$s** | **2,759 $\mu$s** |
-| **MULTI-EXP-02** | MULTI-02: Worker-Heavy Aisle | 1 AMR + 2 Humans (3 pairs) | 1.00 | 25 | 0.00 | **2.00 m** | **8.65 m** | AMR-01 ↔ Worker-01 | **UNSAFE** | 12.2 s | 13.8 s | 4.5 s | **46 $\mu$s** | **792 $\mu$s** |
-| **MULTI-EXP-03** | MULTI-03: Process Plant Convergence | 2 AMRs + 2 Humans (6 pairs) | 0.65 | 30 | 0.10 | **0.02 m** | **10.03 m** | AMR-01 ↔ Worker-01 | **EMERGENCY** | 14.3 s | 17.0 s | 7.1 s | **69 $\mu$s** | **603 $\mu$s** |
+| **MULTI-EXP-01** | MULTI-01: Intersection Crossing | 2 AMRs + 2 Humans (6 pairs) | 1.00 | 25 | 0.00 | **0.05 m** | **7.05 m** | AMR-01 ↔ AMR-02 | **EMERGENCY** | 23.4 s | 25.1 s | 4.9 s | **38 $\mu$s** | **930 $\mu$s** |
+| **MULTI-EXP-02** | MULTI-02: Worker-Heavy Aisle | 1 AMR + 2 Humans (3 pairs) | 1.00 | 25 | 0.00 | **2.00 m** | **8.65 m** | AMR-01 ↔ Worker-01 | **UNSAFE** | 12.2 s | 13.8 s | 4.5 s | **16 $\mu$s** | **99 $\mu$s** |
+| **MULTI-EXP-03** | MULTI-03: Process Plant Convergence | 2 AMRs + 2 Humans (6 pairs) | 0.65 | 30 | 0.10 | **0.02 m** | **10.03 m** | AMR-01 ↔ Worker-01 | **EMERGENCY** | 14.3 s | 17.0 s | 7.1 s | **28 $\mu$s** | **386 $\mu$s** | MULTI-03: Process Plant Convergence | 2 AMRs + 2 Humans (6 pairs) | 0.65 | 30 | 0.10 | **0.02 m** | **10.03 m** | AMR-01 ↔ Worker-01 | **EMERGENCY** | 14.3 s | 17.0 s | 7.1 s | **69 $\mu$s** | **603 $\mu$s** |
 
 ---
 

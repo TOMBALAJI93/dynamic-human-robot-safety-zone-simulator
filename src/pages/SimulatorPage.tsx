@@ -264,8 +264,8 @@ export const SimulatorPage: React.FC<SimulatorPageProps> = ({ language }) => {
     });
 
     // Check completion if all primary paths are finished
-    const allRobotsDone = nextRobots.every(r => r.currentWaypointIndex >= r.path.length - 1);
-    const allHumansDone = nextHumans.every(h => h.currentWaypointIndex >= h.path.length - 1);
+    const allRobotsDone = nextRobots.every((r: RobotEntity) => r.currentWaypointIndex >= r.path.length - 1);
+    const allHumansDone = nextHumans.every((h: HumanEntity) => h.currentWaypointIndex >= h.path.length - 1);
     if (allRobotsDone && allHumansDone && nextTime > 2) {
       setIsRunning(false);
       generateRunSummary(nextTime, currentMultiEval);
@@ -648,7 +648,7 @@ export const SimulatorPage: React.FC<SimulatorPageProps> = ({ language }) => {
         const midY = (pA.y + pB.y) / 2;
         ctx.fillStyle = '#020617';
         ctx.fillRect(midX - 32, midY - 11, 64, 20);
-        ctx.strokeStyle = ctx.strokeStyle;
+        ctx.strokeStyle = '#38bdf8';
         ctx.strokeRect(midX - 32, midY - 11, 64, 20);
         ctx.fillStyle = '#f8fafc';
         ctx.font = 'bold 10px monospace';

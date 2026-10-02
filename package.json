@@ -8,7 +8,10 @@
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "preview": "vite preview",
-    "generate-data": "npx tsx scripts/generateSyntheticData.ts"
+    "generate-data": "npx tsx scripts/generateSyntheticData.ts",
+    "test": "npx tsx scripts/runTests.ts",
+    "benchmark": "npx tsx scripts/runMultiAgentExperiment.ts",
+    "typecheck": "tsc -b"
   },
   "dependencies": {
     "clsx": "^2.1.1",
